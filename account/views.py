@@ -97,79 +97,37 @@ class UserGenericByOne(generics.RetrieveAPIView):
     lookup_field = 'pk'
 
 
-class OtpVerifyView(APIView):
-    @swagger_auto_schema(methods = ['POST'], request_body=OtpSerializer())
-    @action(detail=True, methods = ['POST']) 
-
-    def post(self, request):
-
-        serializer = OtpSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        otp = serializer.validated_data['otp']                                                                                                                                                  #type: ignore
-
-        if not OTP.objects.filter(otp=otp).exists():
-            return Response({'error': 'Invalid OTP'}, status=404)
-        
-        otp = OTP.objects.get(otp=otp)
-
-        if otp.is_otp_valid():
-            
-            otp.user.is_active = True
-            otp.user.save()
-
-            otp.delete()
-
-            return Response({'message': 'OTP verified successfully'}, status=200)
-        
-        else:
-
-            otp.delete()
-
-            return Response({'error': 'OTP expired'}, status=400)
-
-
-
 class ForgotPasswordView(APIView):
+
     @swagger_auto_schema(request_body=ForgotPasswordSerializer)
+    
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']                                                                                                                                                              #type: ignore
-        
+
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({"error": "User with this email does not exist."}, status=404)
-        
-        
+
         otp_code = generate_otp()
         expiry = timezone.now() + timedelta(minutes=10)
-        
-       
+
+        OTP.objects.filter(user=user).delete()
+      
         OTP.objects.create(
             otp=str(otp_code),
             user=user,
             expiry_date=expiry
         )
-        
-        url = "https://api.useplunk.com/v1/track"
-        headers = {
-            "Authorization": "Bearer sk_10c4a02e1119df59dedfc538c730b4e437b997aa7ff781f0",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "email": email,
-            "event": "password-reset",
-            "data": {
-                "full_name": user.full_name,                                                                                                                                            #type: ignore
-                "otp": str(otp_code)
-            }
-        }
-        response = requests.post(url, headers=headers, json=data)
-        print(response.json())
-        
-        return Response({"message": "OTP sent to your email."})
+
+        return Response({
+                "message": "OTP generated successfully",
+                "otp": str(otp_code)  
+            }, status=200
+        )
+
 
 class ResetPasswordView(APIView):
     @swagger_auto_schema(request_body=ResetPasswordSerializer)
